@@ -42,65 +42,58 @@ export default function GlassBoxDebugger() {
     return () => { mounted = false }
   }, [])
 
-    const handleSendMessage = async (text: string) => {
-    const userMessage: Message = {
-      id: `msg-${Date.now()}`,
-      role: 'user',
+const handleSendMessage = async (text: string) => {
+  const userMessage: Message = {
+    id: `msg-${Date.now()}`,
+    role: 'user',
+    text,
+    timestamp: Date.now(),
+  }
+  setMessages((prev) => [...prev, userMessage])
+
+  try {
+    // Build history for backend: include *all* messages including this one
+    const historyPayload = [...messages, userMessage].map((m) => ({
+      role: m.role === 'agent' ? 'assistant' : m.role, // map to OpenAI-style roles
+      content: m.text,
+    }))
+
+    const result = await api.runPipeline(
       text,
+      historyPayload,
+      'default', // or some conversationId state if you add that later
+    )
+
+    const answer = result.answer ?? {}
+    const agentText =
+      answer.final_answer ??
+      answer.text ??
+      answer.content ??
+      JSON.stringify(answer)
+
+    const agentMessage: Message = {
+      id: result.message_id || `msg-agent-${Date.now()}`,
+      role: 'agent',
+      text: agentText,
+      code: undefined,
+      contextUsed: Array.isArray(result.context?.selected_chunks)
+        ? result.context.selected_chunks.map((c: any) => c.chunk?.chunk_id ?? c.chunk_id)
+        : undefined,
       timestamp: Date.now(),
     }
-    // optimistic update
-    setMessages((prev) => [...prev, userMessage])
 
-    try {
-      // Build conversation history in backend shape: [{ role, content }]
-      const historyPayload = [...messages, userMessage].map((m) => ({
-        role: m.role === 'agent' ? 'assistant' : m.role, // map 'agent' -> 'assistant'
-        content: m.text,
-      }))
+    setMessages((prev) => [...prev, agentMessage])
 
-      // call backend run endpoint
-      const result = await api.runPipeline(text, historyPayload, 'default')
-
-      const answer = result.answer ?? {}
-
-      // Our backend's AnswerAgent returns `final_answer` as the text field
-      const agentText =
-        answer.final_answer ??
-        answer.answer_text ?? // fallback if you later rename
-        answer.text ??
-        answer.content ??
-        JSON.stringify(answer)
-
-      // Extract which chunks were selected in this run, if you want to surface that
-      const contextUsedIds = Array.isArray(result.context?.selected_chunks)
-        ? result.context.selected_chunks.map((c: any) =>
-            c.chunk?.chunk_id ?? c.chunk_id
-          )
-        : undefined
-
-      const agentMessage: Message = {
-        id: result.message_id || `msg-agent-${Date.now()}`,
-        role: 'agent',
-        text: agentText,
-        code: answer.final_code ?? answer.code,
-        contextUsed: contextUsedIds,
-        timestamp: Date.now(),
-      }
-
-      setMessages((prev) => [...prev, agentMessage])
-
-      // refresh timeline and context graph
-      const [timeline, ctx] = await Promise.all([
-        api.getTraceTimeline(),
-        api.getContextGraph(),
-      ])
-      setTraceLog(timeline)
-      setContextStore(ctx)
-    } catch (err) {
-      console.error('Run failed', err)
-    }
+    const [timeline, ctx] = await Promise.all([
+      api.getTraceTimeline(),
+      api.getContextGraph(),
+    ])
+    setTraceLog(timeline)
+    setContextStore(ctx)
+  } catch (err) {
+    console.error('Run failed', err)
   }
+}
 
   const handleViewContext = () => {
     setCurrentView('graph')
