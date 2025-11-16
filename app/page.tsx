@@ -52,16 +52,15 @@ const handleSendMessage = async (text: string) => {
   setMessages((prev) => [...prev, userMessage])
 
   try {
-    // Build history for backend: include *all* messages including this one
     const historyPayload = [...messages, userMessage].map((m) => ({
-      role: m.role === 'agent' ? 'assistant' : m.role, // map to OpenAI-style roles
+      role: m.role === 'agent' ? 'assistant' : m.role,
       content: m.text,
     }))
 
     const result = await api.runPipeline(
       text,
       historyPayload,
-      'default', // or some conversationId state if you add that later
+      'default', // or a conversationId state later
     )
 
     const answer = result.answer ?? {}
@@ -77,9 +76,12 @@ const handleSendMessage = async (text: string) => {
       text: agentText,
       code: undefined,
       contextUsed: Array.isArray(result.context?.selected_chunks)
-        ? result.context.selected_chunks.map((c: any) => c.chunk?.chunk_id ?? c.chunk_id)
+        ? result.context.selected_chunks.map(
+            (c: any) => c.chunk?.chunk_id ?? c.chunk_id,
+          )
         : undefined,
       timestamp: Date.now(),
+      runId: result.run_id,  
     }
 
     setMessages((prev) => [...prev, agentMessage])
@@ -99,37 +101,46 @@ const handleSendMessage = async (text: string) => {
     setCurrentView('graph')
   }
 
-  const handleViewResponseContext = async (messageId: string) => {
-    // find run id for message from timeline
-    const entry = traceLog.find((t: any) => (t as any).messageId === messageId)
-    const runId = entry ? (entry as any).run_id : null
-    if (!runId) {
-      // try refreshing timeline then lookup again
-      try {
-        const timeline = await api.getTraceTimeline()
-        setTraceLog(timeline)
-        const refreshed = timeline.find((t: any) => (t as any).messageId === messageId)
-        if (refreshed) {
-          const rc = await api.getRunContext(refreshed.run_id)
-          setResponseContext(rc)
-          setSelectedMessageId(messageId)
-        } else {
-          console.warn('No run found for message', messageId)
-        }
-      } catch (err) {
-        console.error('Failed to fetch timeline/run context', err)
-      }
-      return
-    }
+const handleViewResponseContext = async (messageId: string) => {
+  // 1) Try to get runId directly from the message
+  const msg = messages.find((m) => m.id === messageId)
+  let runId = msg?.runId
 
+  // 2) Fallback: use the timeline mapping (for older data)
+  if (!runId) {
+    const entry = traceLog.find((t: any) => (t as any).messageId === messageId)
+    runId = entry ? (entry as any).run_id : undefined
+  }
+
+  if (!runId) {
+    // Optional: refresh timeline once before giving up
     try {
-      const rc = await api.getRunContext(runId)
-      setResponseContext(rc)
-      setSelectedMessageId(messageId)
+      const timeline = await api.getTraceTimeline()
+      setTraceLog(timeline)
+      const refreshed = timeline.find(
+        (t: any) => (t as any).messageId === messageId,
+      )
+      if (refreshed) {
+        runId = (refreshed as any).run_id
+      }
     } catch (err) {
-      console.error('Failed to load run context', err)
+      console.error('Failed to refresh timeline', err)
     }
   }
+
+  if (!runId) {
+    console.warn('No run found for message', messageId)
+    return
+  }
+
+  try {
+    const rc = await api.getRunContext(runId)
+    setResponseContext(rc)
+    setSelectedMessageId(messageId)
+  } catch (err) {
+    console.error('Failed to load run context', err)
+  }
+}
 
   const handleNodeClick = (nodeId: string) => {
     setSelectedNodeId(nodeId)
