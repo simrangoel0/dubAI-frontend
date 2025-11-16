@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { ArrowLeft, Settings, Wrench, ZoomIn, ZoomOut } from 'lucide-react'
 import { ContextChunk } from '@/types'
+import { palette, background as bgColor, dropped as droppedColors } from '@/lib/ui-config'
 
 interface Node {
   id: string
@@ -26,18 +27,22 @@ interface ObsidianGraphViewProps {
   contextStore: ContextChunk[]
   onNodeClick: (nodeId: string) => void
   onBack: () => void
+  // called when a node is toggled dropped/in-use
+  onToggleDropped?: (nodeId: string, dropped: boolean) => void
 }
 
 export default function ObsidianGraphView({
   contextStore,
   onNodeClick,
   onBack,
+  onToggleDropped,
 }: ObsidianGraphViewProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const nodesRef = useRef<Node[]>([])
+  const fileColorMapRef = useRef<Map<string, string>>(new Map())
   const edgesRef = useRef<Edge[]>([])
   const hoveredNodeRef = useRef<string | null>(null)
-  const animationFrameRef = useRef<number>()
+  const animationFrameRef = useRef<number | null>(null)
   const initializedRef = useRef(false)
   const [zoom, setZoom] = useState(1)
   const [pan, setPan] = useState({ x: 0, y: 0 })
@@ -46,28 +51,31 @@ export default function ObsidianGraphView({
   const [localContextStore, setLocalContextStore] = useState<ContextChunk[]>(contextStore)
   const [droppedNodes, setDroppedNodes] = useState<Set<string>>(new Set())
 
-  const colors = [
-    '#3b82f6', // blue
-    '#ef4444', // red
-    '#22d3ee', // cyan
-    '#f97316', // orange
-    '#a855f7', // purple
-    '#84cc16', // lime
-    '#ec4899', // pink
-    '#ffffff', // white
-    '#6b7280', // gray
-  ]
+  // colors are centralized in `lib/ui-config.ts` as `categoryColors`.
 
   useEffect(() => {
     if (initializedRef.current) return
     
     console.log('[v0] Initializing graph with', contextStore.length, 'nodes')
     
+    const getColorForFile = (file: string) => {
+      const map = fileColorMapRef.current
+      if (map.has(file)) return map.get(file)!
+      // simple stable hash -> index
+      let h = 0
+      for (let i = 0; i < file.length; i++) {
+        h = (h * 31 + file.charCodeAt(i)) >>> 0
+      }
+      const color = palette[h % palette.length]
+      map.set(file, color)
+      return color
+    }
+
     const initialNodes: Node[] = contextStore.map((chunk, idx) => {
       const influence = chunk.totalInfluence
       const size = 8 + influence * 22
-      const colorIdx = ['component', 'utility', 'documentation', 'hook', 'api'].indexOf(chunk.category)
-      const color = colors[colorIdx % colors.length]
+      // assign a stable per-file color
+      const color = getColorForFile(chunk.file)
 
       return {
         id: chunk.id,
@@ -106,7 +114,7 @@ export default function ObsidianGraphView({
     setDroppedNodes(initialDropped)
     
     console.log('[v0] Graph initialized with', initialNodes.length, 'nodes and', initialEdges.length, 'edges')
-  }, [contextStore, colors])
+  }, [contextStore])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -137,7 +145,7 @@ export default function ObsidianGraphView({
         return
       }
 
-      ctx.fillStyle = '#0f172a'
+      ctx.fillStyle = bgColor
       ctx.fillRect(0, 0, canvas.offsetWidth, canvas.offsetHeight)
 
       ctx.save()
@@ -200,18 +208,18 @@ export default function ObsidianGraphView({
         
         if (isHovered) {
           ctx.shadowBlur = 20
-          ctx.shadowColor = isDropped ? '#6b7280' : node.color
+          ctx.shadowColor = isDropped ? droppedColors.shadow : node.color
         } else {
           ctx.shadowBlur = 0
         }
 
-        ctx.fillStyle = isDropped ? '#4b5563' : node.color
+        ctx.fillStyle = isDropped ? droppedColors.fill : node.color
         ctx.beginPath()
         ctx.arc(node.x, node.y, node.size, 0, Math.PI * 2)
         ctx.fill()
 
         ctx.shadowBlur = 0
-        ctx.fillStyle = isDropped ? '#9ca3af' : '#ffffff'
+        ctx.fillStyle = isDropped ? droppedColors.text : '#ffffff'
         ctx.font = isHovered ? 'bold 13px sans-serif' : '11px sans-serif'
         ctx.textAlign = 'center'
         ctx.fillText(node.label, node.x, node.y - node.size - 8)
@@ -332,6 +340,9 @@ export default function ObsidianGraphView({
   }
 
   const handleToggleNode = (nodeId: string) => {
+    // compute new dropped state
+    const willBeDropped = !droppedNodes.has(nodeId)
+
     setDroppedNodes((prev) => {
       const newSet = new Set(prev)
       if (newSet.has(nodeId)) {
@@ -341,12 +352,17 @@ export default function ObsidianGraphView({
       }
       return newSet
     })
-    
-    setLocalContextStore((prev) => 
-      prev.map((chunk) => 
+
+    setLocalContextStore((prev) =>
+      prev.map((chunk) =>
         chunk.id === nodeId ? { ...chunk, dropped: !chunk.dropped } : chunk
       )
     )
+
+    // notify parent so the toggle can be persisted globally (or to backend)
+    if (typeof onToggleDropped === 'function') {
+      onToggleDropped(nodeId, willBeDropped)
+    }
   }
 
   const handleZoomIn = () => setZoom((z) => Math.min(z + 0.2, 3))

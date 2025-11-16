@@ -8,6 +8,7 @@ import ResponseContextModal from '@/components/response-context-modal'
 import ResponseContextViewer from '@/components/response-context-viewer'
 import { Message, ContextChunk, ResponseContext, TraceLogEvent } from '@/types'
 import * as api from '@/lib/api'
+import { inferCategoryFromPath } from '@/lib/infer-category'
 
 export default function GlassBoxDebugger() {
   const [currentView, setCurrentView] = useState<'chat' | 'graph'>('chat')
@@ -32,7 +33,9 @@ export default function GlassBoxDebugger() {
         ])
         if (!mounted) return
         setMessages(msgs)
-        setContextStore(ctx)
+        setContextStore(
+          ctx.map((c: ContextChunk) => ({ ...c, category: inferCategoryFromPath(c.file) }))
+        )
         setTraceLog(timeline)
       } catch (err) {
         console.error('Failed to load initial data', err)
@@ -91,7 +94,9 @@ const handleSendMessage = async (text: string) => {
       api.getContextGraph(),
     ])
     setTraceLog(timeline)
-    setContextStore(ctx)
+    setContextStore(
+      ctx.map((c: ContextChunk) => ({ ...c, category: inferCategoryFromPath(c.file) }))
+    )
   } catch (err) {
     console.error('Run failed', err)
   }
@@ -146,6 +151,12 @@ const handleViewResponseContext = async (messageId: string) => {
     setSelectedNodeId(nodeId)
   }
 
+  const handleToggleDropped = (nodeId: string, dropped: boolean) => {
+    // update global contextStore so the dropped state is consistent across the app
+    setContextStore((prev) => prev.map((c) => (c.id === nodeId ? { ...c, dropped } : c)))
+    // TODO: optionally persist to backend via API
+  }
+
   const handleCloseModal = () => {
     setSelectedNodeId(null)
   }
@@ -180,6 +191,7 @@ const handleViewResponseContext = async (messageId: string) => {
           contextStore={contextStore}
           onNodeClick={handleNodeClick}
           onBack={handleBackToChat}
+          onToggleDropped={handleToggleDropped}
         />
       )}
 

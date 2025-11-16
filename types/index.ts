@@ -12,6 +12,8 @@ export interface Message {
   runId?: string;
 }
 
+export type ContextCategory = 'component' | 'utility' | 'documentation' | 'hook' | 'api'
+
 export interface ContextChunk {
   id: string;
   file: string;
@@ -20,7 +22,7 @@ export interface ContextChunk {
   preview: string;
   totalInfluence: number;
   usageTimeline: number[];
-  category: string;
+  category: ContextCategory;
   dropped?: boolean;
 }
 

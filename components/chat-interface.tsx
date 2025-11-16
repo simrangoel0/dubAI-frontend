@@ -9,7 +9,8 @@ import TraceLogTimeline from '@/components/trace-log-timeline'
 
 interface ChatInterfaceProps {
   messages: Message[]
-  onSendMessage: (text: string) => void
+  // accept either a sync or async sender to be resilient to caller implementations
+  onSendMessage: (text: string) => void | Promise<void>
   onViewContext: () => void
   onViewResponseContext: (messageId: string) => void
   traceLog: TraceLogEvent[]
@@ -70,12 +71,18 @@ export default function ChatInterface({
     return () => observer.disconnect()
   }, [messages, clickLinkedMessageId])
 
-  const handleSend = () => {
-    if (input.trim()) {
-      setIsLoading(true)
-      onSendMessage(input)
-      setInput('')
-      setTimeout(() => setIsLoading(false), 1000)
+  const handleSend = async () => {
+    const trimmed = input.trim()
+    if (!trimmed || isLoading) return
+
+    setIsLoading(true)
+    setInput('')
+
+    try {
+      // Support both sync and async implementations
+      await Promise.resolve(onSendMessage(trimmed))
+    } finally {
+      setIsLoading(false)
     }
   }
 
