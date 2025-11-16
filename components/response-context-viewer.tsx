@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { X, ZoomIn, ZoomOut } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ResponseContext, ContextChunk } from '@/types'
+import * as api from '@/lib/api'
 
 interface ResponseContextViewerProps {
   messageId: string
@@ -308,6 +309,27 @@ export default function ResponseContextViewer({
     }
   }, [responseContext, contextStore, isDragging, pan, dragStart, zoom])
 
+  // content fetched on-demand for selected node
+  const [selectedNodeContent, setSelectedNodeContent] = useState<string | null>(null)
+  useEffect(() => {
+    let mounted = true
+    if (!selectedNode) {
+      setSelectedNodeContent(null)
+      return
+    }
+    ;(async () => {
+      try {
+        const detail = await api.getChunkDetail(selectedNode.chunk.id)
+        if (!mounted) return
+        setSelectedNodeContent(detail?.text ?? null)
+      } catch (err) {
+        console.debug('No chunk detail', err)
+        setSelectedNodeContent(null)
+      }
+    })()
+    return () => { mounted = false }
+  }, [selectedNode])
+
   const handleWheel = (e: React.WheelEvent<HTMLCanvasElement>) => {
     e.preventDefault()
     
@@ -438,10 +460,8 @@ export default function ResponseContextViewer({
                 <h4 className="mb-2 text-sm font-medium text-foreground">Context Preview</h4>
                 <div className="max-h-[200px] overflow-auto rounded-lg border border-border bg-muted/30 p-4">
                   <pre className="text-xs leading-relaxed text-muted-foreground whitespace-pre-wrap font-mono">
-                    {selectedNode.chunk.content 
-                      ? selectedNode.chunk.content.slice(0, 500) 
-                      : 'No content available'}
-                    {selectedNode.chunk.content && selectedNode.chunk.content.length > 500 && '...'}
+                    {selectedNodeContent ? selectedNodeContent.slice(0, 500) : (selectedNode.chunk.preview ?? 'No content available')}
+                    {selectedNodeContent && selectedNodeContent.length > 500 && '...'}
                   </pre>
                 </div>
               </div>
@@ -452,3 +472,4 @@ export default function ResponseContextViewer({
     </div>
   )
 }
+

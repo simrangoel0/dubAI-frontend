@@ -1,8 +1,10 @@
-'use client'
+"use client"
 
+import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { X } from 'lucide-react'
 import { ContextChunk, ResponseContext } from '@/types'
+import * as api from '@/lib/api'
 
 interface ResponseContextModalProps {
   nodeId: string
@@ -21,7 +23,28 @@ export default function ResponseContextModal({
   const responseChunk = responseContext.chunks.find((c) => c.id === nodeId) || 
                         responseContext.droppedChunks.find((c) => c.id === nodeId)
 
+  const [fullChunk, setFullChunk] = useState<any | null>(null)
+
+  useEffect(() => {
+    let mounted = true
+    if (!chunk) return
+    // fetch detail for chunk (text, meta, stats) if available
+    ;(async () => {
+      try {
+        const detail = await api.getChunkDetail(chunk.id)
+        if (!mounted) return
+        setFullChunk(detail)
+      } catch (err) {
+        // it's okay if detail isn't available; we keep preview
+        console.debug('No chunk detail', err)
+      }
+    })()
+    return () => { mounted = false }
+  }, [chunk])
+
   if (!chunk) return null
+
+  const content = fullChunk?.text ?? null
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
@@ -81,7 +104,7 @@ export default function ResponseContextModal({
           <div className="mb-6">
             <h3 className="mb-2 text-sm font-semibold text-foreground">Code Preview</h3>
             <pre className="overflow-x-auto rounded-lg bg-secondary p-4 text-xs font-mono leading-relaxed text-foreground">
-              <code>{chunk.preview}</code>
+              <code>{content ?? chunk.preview}</code>
             </pre>
           </div>
 
