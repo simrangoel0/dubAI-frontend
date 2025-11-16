@@ -39,29 +39,24 @@ export interface ResponseContext {
 }
 
 export interface TraceLogRun {
-  type: "run";
-  run_id: string;
-  summary: string;
-  timestamp: string;
-  messageId?: string;
+  type: 'run'
+  run_id: string
+  messageId: string
+  user_query: string  
+  summary: string
+  timestamp: string
+  runLabel: string
   retrieveStep?: {
-    selectedChunks: string[];
-    droppedChunks: string[];
-  };
-  scoringSummary?: {
-    chunkId: string;
-    score: number;
-  }[];
-  finalPrompt?: string;
+    selectedChunks: string[]
+    droppedChunks: string[]
+  }
   influenceMap?: {
-    chunkId: string;
-    influence: number;
-  }[];
-  codeDiff?: {
-    before: string;
-    after: string;
-  };
+    chunkId: string
+    influence: number
+  }[]
+  codeDiff?: any
 }
+
 
 export interface TraceLogContextChange {
   type: "context_change";

@@ -123,7 +123,7 @@ export default function TraceLogTimeline({
                             <div className={`text-sm font-medium transition-colors duration-200 ${
                               isLinked ? 'text-cyan-400' : 'text-foreground'
                             }`}>
-                              {(event as TraceLogRun).run_id}
+                              {(event as TraceLogRun).runLabel}
                             </div>
                             <div className="text-xs text-muted-foreground">
                               {(event as TraceLogRun).summary}

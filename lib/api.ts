@@ -44,7 +44,7 @@ export async function getTraceTimeline(limit = 50) {
   return data.map((r: any) => ({
     type: "run",
     run_id: r.run_id,
-    summary: r.user_query ?? "",
+    summary: r.summary ?? "",
     timestamp: r.created_at,
     messageId: r.message_id,
     retrieveStep: undefined,
